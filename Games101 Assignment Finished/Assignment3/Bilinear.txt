@@ -1,0 +1,89 @@
+Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
+{
+    Eigen::Vector3f return_color = {0, 0, 0};
+    if (payload.texture)
+    {
+        // TODO: Get the texture value at the texture coordinates of the current fragment
+        return_color = payload.texture -> getColor(payload.tex_coords.x(),payload.tex_coords.y());
+        //return_color = payload.texture -> getColorBilinear(payload.tex_coords.x(),payload.tex_coords.y());
+    }
+    Eigen::Vector3f texture_color;
+    texture_color << return_color.x(), return_color.y(), return_color.z();
+
+    Eigen::Vector3f ka = Eigen::Vector3f(0.005, 0.005, 0.005);
+    Eigen::Vector3f kd = texture_color / 255.f;
+    Eigen::Vector3f ks = Eigen::Vector3f(0.7937, 0.7937, 0.7937);
+
+    auto l1 = light{{20, 20, 20}, {500, 500, 500}};
+    auto l2 = light{{-20, 20, 0}, {500, 500, 500}};
+
+    std::vector<light> lights = {l1, l2};
+    Eigen::Vector3f amb_light_intensity{10, 10, 10};
+    Eigen::Vector3f eye_pos{0, 0, 10};
+
+    float p = 150;
+
+    Eigen::Vector3f color = texture_color;
+    Eigen::Vector3f point = payload.view_pos;
+    Eigen::Vector3f normal = payload.normal;
+
+    Eigen::Vector3f result_color = {0, 0, 0};
+
+    Eigen::Vector3f v = (eye_pos - point).normalized();
+
+    for (auto& light : lights)
+    {
+        // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
+        // components are. Then, accumulate that result on the *result_color* object.
+        Eigen::Vector3f l = (light.position - point).normalized();
+        Eigen::Vector3f h = (v + l).normalized();
+        auto r2 = (light.position - point).squaredNorm();
+
+        auto ambient = ka.cwiseProduct(amb_light_intensity);
+
+        auto diffuse = kd.cwiseProduct(light.intensity/r2 * MAX(0.0f,normal.dot(l)));
+
+        auto specular = ks.cwiseProduct(light.intensity/r2 * std::pow(MAX(0.0f,normal.dot(h)),p));
+
+        result_color += ambient + diffuse + specular;
+    }
+
+    return result_color * 255.f;
+}
+
+Eigen::Vector3f getColorBilinear(float u,float v)
+    {
+        if(u<0)u=0;
+        if(u>1)u=1;
+        if(v<0)v=0;
+        if(v>1)v=1;
+
+        auto u_img = u * (width - 1);
+        auto v_img = (1 - v) * (height - 1);
+
+        /*
+        Eigen::Vector2f u00(std::floor(u_img), std::floor(v_img));
+        Eigen::Vector2f u10(std::ceil(u_img), std::floor(v_img));
+        Eigen::Vector2f u00(std::floor(u_img), std::ceil(v_img));
+        Eigen::Vector2f u00(std::ceil(u_img), std::ceil(v_img));
+        */
+
+        auto color00 = getColor((std::floor(u_img))/width,1-(std::floor(v_img))/height);
+        auto color10 = getColor((std::ceil(u_img))/width, 1-(std::floor(v_img))/height);
+        auto color01 = getColor((std::floor(u_img))/width,1-(std::ceil(v_img))/height);
+        auto color11 = getColor((std::ceil(u_img))/width, 1-(std::ceil(v_img))/height);
+        
+
+        float s = u_img - std::floor(u_img);
+        float t = v_img - std::floor(v_img);
+
+        auto color0 = lerp(s,color00,color10);
+        auto color1 = lerp(s,color10,color11);
+        auto color = lerp(s,color0,color1);
+
+        return Eigen::Vector3f(color[0], color[1], color[2]);
+    }
+   Eigen::Vector3f lerp(float coefficient,Eigen::Vector3f color_a,Eigen::Vector3f color_b)
+    {
+        return (1-coefficient) * color_a + coefficient * color_b;
+    }
